@@ -1,0 +1,32 @@
+---
+title: "Machine Learning for Epi: Assignment 8"
+output:
+  html_document: default
+  word_document: default
+date: "2023-03-28"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, 
+                      warning = F,
+                      message = F,
+                      fig.dim = c(12, 7))
+
+library(tidyverse)
+library(randomForest)
+library(caret)
+library(gbm)
+library(pROC)
+library(rpart.plot)
+library(rpart)
+```
+
+Using the demonstration code from today's class, repeat the analysis but use up sampling and tune hyperparameters to try to improve model performance.
+
+You should turn in the following for the assignment
+
+1. Turn in a final knit version of your results, clearly showing the pre and post calibration plots for all three algorithms.
+
+2. Describe your choice of final "optimal" model including why you believe it is the best model. If you decide none of your final models are "optimal", clearly describe why.
+
+3. Describe at least one additional evaluation you would perform if the goal was to implement this model within a clinical setting.
