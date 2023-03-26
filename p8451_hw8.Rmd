@@ -25,13 +25,10 @@ The code chunks below loads and subsets the data, and partitions the data into a
 
 ```{r}
 data ("NHANES")
-table(NHANES$Diabetes)
 
 keep.var<-names(NHANES) %in% c("Age", "Race1", "Education", "Poverty", "Weight", "Height", "Pulse", "Diabetes", "BMI", "PhysActive", "Smoke100", "BPSysAve", "BPDiaAve", "TotChol")
 
 NHANES.subset<-NHANES[keep.var]
-
-str(NHANES.subset)
 
 #Remove missings and then remove duplicates
 NHANES.subset<-na.omit(NHANES.subset)
@@ -100,7 +97,7 @@ svc.nhanes <- train(Diabetes ~ ., data=train.data, method = "svmLinear", trContr
 
 confusionMatrix(svc.nhanes)
 
-svc.nhanes$results %>% kbl(digits = 4) %>% 
+svc.nhanes$results %>% kbl(digits = 5) %>% 
   kable_classic("striped") 
 ```
 
@@ -249,7 +246,7 @@ xyplot(calplot, auto.key=list(columns=2))
 
 #### Final model choice
 
-By comparing the pre-post calibration curves across all 3 models, I would select the RF model among the 3. This is because the RF model reports the highest accuracy on the training data, and after Platt's scaling, the model seems to adequately estimate true diabetes risk for the largest range of risk scores compared to the other 2 models. However, I would only argue that the RF model would only be optimal clinical applications for those with low risk scores for diabetes (0 - 60%), as we can see that the calibration curve levels off very quickly for risk scores greater than 60%. This would result in gross overestimation of diabetes risk, leading to potential harms for patients who may receive unnecessary interventions as a result of misclassification.
+By comparing the pre-post calibration curves across all 3 models, I would select the RF model among the 3. This is because the RF model reports the highest accuracy on the training data, and after Platt's scaling, the model seems to adequately estimate true diabetes risk for the largest range of risk scores compared to the other 2 models. However, I would only argue that the RF model would only be optimal for clinical application among those with low risk scores for diabetes (0 - 60%), as we can see that the calibration curve levels off very quickly for risk scores greater than 60%. If we were to apply this model for patients with very high diabetes risk, it would result in gross overestimation of their true diabetes risk, leading to potential harms for patients who may receive unnecessary interventions as a result of misclassification.
 
 #### Additional evaluation
 
