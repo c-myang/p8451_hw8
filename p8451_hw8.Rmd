@@ -20,18 +20,6 @@ library(randomForest)
 library(kableExtra)
 ```
 
-Using the demonstration code from today's class, repeat the analysis but use up sampling and tune hyperparameters to try to improve model performance.
-
-You should turn in the following for the assignment
-
-1. Turn in a final knit version of your results, clearly showing the pre and post calibration plots for all three algorithms.
-
-
-2. Describe your choice of final "optimal" model including why you believe it is the best model. If you decide none of your final models are "optimal", clearly describe why.
-
-
-3. Describe at least one additional evaluation you would perform if the goal was to implement this model within a clinical setting.
-
 ### Set up: Partition data into training/testing
 The code chunks below loads and subsets the data, and partitions the data into a 70/30 training/testing split.
 
@@ -62,7 +50,6 @@ set.seed(123)
 training.data<-createDataPartition(NHANES.subset$Diabetes, p=0.7, list=F)
 train.data<-NHANES.subset[training.data, ]
 test.data<-NHANES.subset[-training.data, ]
-
 ```
 
 We will fit 3 prediction models to generate a clinical risk score for diabetes. (feature name: `Diabetes`). 
@@ -73,69 +60,52 @@ We will fit 3 prediction models to generate a clinical risk score for diabetes. 
 
 - Model 3 (`logit.nhanes`): A logistic regression model based on all features.
 
-The best tune for hyperparameters will be selected based on accuracy, and the three models compared for accuracy across in the training set. 
+The best tune for hyperparameters will be selected based on accuracy, and the three models will be compared for accuracy in the training set. 
 
 ### Model fitting
-#### Model 1: Random Forest with 3 values of mtry and 3 values of ntree
-For the random forest, we will try 3 different values of mtry. To save computation time, we will use the best tune
+
+#### Model 1: Random Forest 
+
+For the random forest, we will try 3 different values of mtry. To save computational time, we will set ntree to 100, as in Exercise 8, we did not see much of an improvement in model accuracy when increasing the number of trees.
 
 ```{r}
+set.seed(123)
+
 # Try mtry of all, half of all, sqrt of all, 
-# Try ntree of 100, 300, 500
 feat.count <- c((ncol(train.data)-1), (ncol(train.data)-1)/2, sqrt(ncol(train.data)-1))
 grid.rf <- expand.grid(mtry = feat.count)
 
 #Set 5-fold cross-validation and upsample
 control.obj = trainControl(method = "cv", number = 5, sampling = "up")
 
-tree.num <- seq(100, 500, by = 200)
-results.trees <- list()
-for (ntree in tree.num){
-  set.seed(123)
-    rf.nhanes<-train(Diabetes~., data=train.data, method="rf", trControl=control.obj, metric="Accuracy", tuneGrid=grid.rf, importance=TRUE, ntree=ntree)
-    index <- toString(ntree)
-  results.trees[[index]]<-rf.nhanes$results
-}
+rf.nhanes.bt <- train(Diabetes~., data=train.data, method="rf", trControl=control.obj, metric="Accuracy", tuneGrid = grid.rf, importance=TRUE, ntree=100)
 
-output.nhanes<-bind_rows(results.trees, .id = "ntrees")
-best.tune<-output.nhanes[which.max(output.nhanes[,"Accuracy"]),]
-best.tune$mtry
-results.trees
-mtry.grid <- expand.grid(.mtry=best.tune$mtry)
-
-set.seed(123)
-rf.nhanes.bt<-train(Diabetes~., data=train.data, method="rf", trControl=control.obj, metric="Accuracy", tuneGrid=mtry.grid, importance=TRUE, ntree=as.numeric(best.tune$ntrees))
-rf.nhanes.bt<-train(Diabetes~., data=train.data, method="rf", trControl=control.obj, metric="Accuracy", tuneGrid=mtry.grid, importance=TRUE, ntree=100)
-
-confusionMatrix(rf.nhanes.bt)
-varImp(rf.nhanes.bt)
+confusionMatrix(rf.nhanes.bt) 
 varImpPlot(rf.nhanes.bt$finalModel)
 
 rf.nhanes.bt$results %>% kbl(digits = 4) %>% 
   kable_classic("striped") 
-
 ```
 
 #### Model 2: Support Vector Classifier
+For SVC, we will vary the cost parameter using a vector of values ranging from 0.0001 to 0.001, as we saw in the class exercise that smaller values of C were found to improve model accuracy. 
 
 ```{r}
 set.seed(123)
 
-control.obj <- trainControl(method="cv", number=5, sampling = "up", classProbs = TRUE)
+control.obj <- trainControl(method="cv", number = 5, sampling = "up", classProbs = TRUE)
 
 #Repeat expanding the grid search
-set.seed(123)
+svc.nhanes <- train(Diabetes ~ ., data=train.data, method = "svmLinear", trControl=control.obj, preProcess=c("center", "scale"), probability = TRUE, tuneGrid = expand.grid(C = seq(0.0001,0.001, length = 5)))
 
-svc.nhanes<-train(Diabetes ~ ., data=train.data, method="svmLinear", trControl=control.obj, preProcess=c("center", "scale"), probability=TRUE, tuneGrid=expand.grid(C=seq(0.0001,100, length = 10)))
-
-svc.nhanes$bestTune
-svc.nhanes$results
 confusionMatrix(svc.nhanes)
 
-
+svc.nhanes$results %>% kbl(digits = 4) %>% 
+  kable_classic("striped") 
 ```
 
 #### Model 3: Logistic Regression
+For our baseline logistic regression model, we will train the data using the same train control parameters as above. 
 
 ```{r}
 set.seed(123)
@@ -145,17 +115,22 @@ control.obj <- trainControl(method="cv", number = 5, sampling = "up")
 logit.nhanes <- train(Diabetes~., data = train.data, method = "glm", family = "binomial",
                     preProcess = c("center", "scale"), trControl = control.obj)
 
-logit.nhanes$results
-confusionMatrix(logit.nhanes)
-coef(logit.nhanes$finalModel)
+logit.nhanes$results %>% 
+  kbl(digits = 4) %>% 
+  kable_classic("striped") 
 
+coef(logit.nhanes$finalModel) %>% cbind() %>%
+  kbl(digits = 4) %>% 
+  kable_classic("striped") 
+
+confusionMatrix(logit.nhanes)
 ```
 
 ### Output predicted probabilities from each of the three models applied within the testing set. 
 
 ```{r}
 #Predict in test-set and output probabilities
-rf.probs<-predict(rf.nhanes, test.data, type="prob")
+rf.probs<-predict(rf.nhanes.bt, test.data, type="prob")
 
 #Pull out predicted probabilities for Diabetes=Yes
 rf.pp<-rf.probs[,2]
@@ -167,6 +142,7 @@ svc.pp<-svc.probs[,2]
 logit.probs<-predict(logit.nhanes, test.data, type="prob")
 logit.pp<-logit.probs[,2]
 ```
+
 ### Plot and compare calibration curves across the three algorithms. 
 
 ```{r}
@@ -177,16 +153,15 @@ calplot<-(calibration(Class ~ logit+rf+svc, data=pred.prob, class="Yes", cuts=10
 xyplot(calplot, auto.key=list(columns=3))
 ```
 
+Based on the pre-calibration curves, we can see that all 3 models tend to overestimate risk of diabetes across most risk score values. The exception is for the RF model, which appears to "spike" at a point in the curve, indicating that at a risk score of 70%, the model underestimates diabetes risk at this level.
+
 ### Calibrate the probabilities from SVC and RF
 
-Partition testing data into 2 sets: set to train calibration and then set to evaluate results
-
-Method 1: Platt's Scaling-train a logistic regression model on the outputs of your classifier
-
+The code chunk below partition testing data into 2 sets: set to train calibration and then set to evaluate results. We will use Platt's Scaling to train a logistic regression model on the outputs of our classifier.
 
 ```{r}
-
 set.seed(123)
+
 cal.data.index<-test.data$Diabetes%>% createDataPartition(p=0.5, list=F)
 cal.data<-test.data[cal.data.index, ]
 final.test.data<-test.data[-cal.data.index, ]
@@ -194,11 +169,11 @@ final.test.data<-test.data[-cal.data.index, ]
 #Calibration of RF
 
 #Predict on test-set without scaling to obtain raw pred prob in test set
-rf.probs.nocal<-predict(rf.nhanes, final.test.data, type="prob")
+rf.probs.nocal<-predict(rf.nhanes.bt, final.test.data, type="prob")
 rf.pp.nocal<-rf.probs.nocal[,2]
 
 #Apply model developed on training data to calibration dataset to obtain predictions
-rf.probs.cal<-predict(rf.nhanes, cal.data, type="prob")
+rf.probs.cal<-predict(rf.nhanes.bt, cal.data, type="prob")
 rf.pp.cal<-rf.probs.cal[,2]
 
 #Add to dataset with actual values from calibration data
@@ -224,7 +199,6 @@ xyplot(calplot.rf, auto.key=list(columns=2))
 svc.nocal<-predict(svc.nhanes,final.test.data, type="prob")
 svc.pp.nocal<-svc.nocal[,2]
 
-
 #Apply model developed on training data to calibration dataset to obtain predictions
 svc.cal<-predict(svc.nhanes,cal.data, type="prob")
 svc.pp.cal<-svc.cal[,2]
@@ -244,5 +218,39 @@ platt.prob<-data.frame(Class=final.test.data$Diabetes, svc.platt=platt.data, svc
 
 calplot<-(calibration(Class ~ svc.platt+svc, data=platt.prob, class="Yes", cuts=10))
 xyplot(calplot, auto.key=list(columns=2))
+
+#Calibration of logistic regression
+
+#Predict on test-set without scaling
+logit.nocal<-predict(logit.nhanes,final.test.data, type="prob")
+logit.pp.nocal<-logit.nocal[,2]
+
+#Apply model developed on training data to calibration dataset to obtain predictions
+logit.cal<-predict(logit.nhanes,cal.data, type="prob")
+logit.pp.cal<-logit.cal[,2]
+
+#Add to dataset with actual values from calibration data
+
+calib.data.frame<-data.frame(logit.pp.cal, cal.data$Diabetes)
+colnames(calib.data.frame)<-c("x", "y")
+calib.model<-glm(y ~ x, data=calib.data.frame, family = binomial)
+
+#Predict on test set using model developed in calibration
+data.test<-data.frame(logit.pp.nocal)
+colnames(data.test)<-c("x")
+platt.data<-predict(calib.model, data.test, type="response")
+
+platt.prob<-data.frame(Class=final.test.data$Diabetes, logit.platt=platt.data, logit=logit.pp.nocal)
+
+calplot<-(calibration(Class ~ logit.platt+logit, data=platt.prob, class="Yes", cuts=10))
+xyplot(calplot, auto.key=list(columns=2))
 ```
 
+
+#### Final model choice
+
+By comparing the pre-post calibration curves across all 3 models, I would select the RF model among the 3. This is because the RF model reports the highest accuracy on the training data, and after Platt's scaling, the model seems to adequately estimate true diabetes risk for the largest range of risk scores compared to the other 2 models. However, I would only argue that the RF model would only be optimal clinical applications for those with low risk scores for diabetes (0 - 60%), as we can see that the calibration curve levels off very quickly for risk scores greater than 60%. This would result in gross overestimation of diabetes risk, leading to potential harms for patients who may receive unnecessary interventions as a result of misclassification.
+
+#### Additional evaluation
+
+Before being applied to a clinical setting, I would like to verify whether the data used to train this model adequately captures the diversity and heterogeneity of patient populations that the algorithm would be applied to in a real-world setting. This would address potential issues where the model would perpetuate biases against certain patient populations based on specific features. This could be done by assessing prediction performance of the model on different datasets from different healthcare settings, and consulting with clinicians, healthcare pracitioners, and subject knowledge experts to evaluate the algorithm's performance before being applied in a clinical setting.
